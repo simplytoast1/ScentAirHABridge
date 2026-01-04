@@ -98,9 +98,9 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
     # Mapping based on analysis:
     # 0=Black(Off), 1=Red, 2=Orange, 3=Yellow, 4=Green, 5=Blue, 6=Purple, 7=White, 8=Aqua
     # Mapping based on analysis:
-    # 0=Black(Off), 1=Red, 2=Orange, 3=Yellow, 4=Green, 5=Blue, 6=Purple, 7=Black(Off), 8=White
+    # 0=Aqua, 1=Red, 2=Orange, 3=Yellow, 4=Green, 5=Blue, 6=Purple, 7=Black(Off), 8=White
     _COLORS = {
-        0: "Off",
+        0: "Aqua",
         1: "Red",
         2: "Orange",
         3: "Yellow",
@@ -110,11 +110,12 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
         7: "Black (Off)",
         8: "White"
     }
-    # Reverse map for name -> id (Exclude 0 and 7)
-    _COLOR_TO_ID = {v: k for k, v in _COLORS.items() if k not in (0, 7)}
+    # Reverse map for name -> id (Exclude 7)
+    _COLOR_TO_ID = {v: k for k, v in _COLORS.items() if k != 7}
     
     # Map for easy HS color matching (Hue, Saturation)
     _HS_MAP = {
+        0: (180, 100),  # Aqua
         1: (0, 100),    # Red
         2: (30, 100),   # Orange
         3: (60, 100),   # Yellow
@@ -153,34 +154,33 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
             
     @property
     def is_on(self) -> bool:
-        """Return true if light is on (value > 0 and not 7)."""
+        """Return true if light is on (value != 7)."""
         val = self._get_current_value()
         # 7 is Black/Off based on user logs
-        return val > 0 and val != 7
+        return val != 7
 
     @property
     def brightness_step_pct(self) -> float | None:
         """Return brightness."""
-        # Simple On/Off brightness for now, or could map to 7/8? No, strictly preset.
         return 100 if self.is_on else 0
 
     @property
     def hs_color(self) -> tuple[float, float] | None:
         """Return the hs color value."""
         val = self._get_current_value()
-        return self._HS_MAP.get(val, (0, 0)) # Default to white if unknown
+        return self._HS_MAP.get(val, (0, 0)) # Default to white/off if unknown
 
     @property
     def effect(self) -> str | None:
         """Return the current start effect."""
         val = self._get_current_value()
-        return self._COLORS.get(val, "White") if (val > 0 and val != 7) else None
+        return self._COLORS.get(val, "White") if val != 7 else None
 
     def _get_current_value(self) -> int:
         try:
-            return int(self._config.get("rgbLight", {}).get("integerValue", "0"))
+            return int(self._config.get("rgbLight", {}).get("integerValue", "7"))
         except (ValueError, TypeError):
-            return 0
+            return 7 # Default to Off
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the light."""
@@ -199,13 +199,12 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
                 target_val = 8 # White
             else:
                 # Map hue to colors
-                # Red=0/360, Orange=30, Yellow=60, Green=120, Blue=240, Purple=270
+                # Red=0/360, Orange=30, Yellow=60, Green=120, Aqua=180, Blue=240, Purple=270
                 if 15 <= hue < 45: target_val = 2 # Orange
                 elif 45 <= hue < 90: target_val = 3 # Yellow
                 elif 90 <= hue < 150: target_val = 4 # Green
-                # Aqua was 8, but 8 is white. So skipping Aqua or mapping to Green/Blue?
-                # Maybe 150-210 was Aqua(8). Now 150-210 -> Blue(5)?
-                elif 150 <= hue < 260: target_val = 5 # Blue (Wide range to cover aqua)
+                elif 150 <= hue < 210: target_val = 0 # Aqua (0)
+                elif 210 <= hue < 260: target_val = 5 # Blue
                 elif 260 <= hue < 315: target_val = 6 # Purple
                 else: target_val = 1 # Red
 
@@ -215,5 +214,5 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the light."""
         loc_id = self._asset_data.get("_loc_id")
-        await self.coordinator.api.control_asset(loc_id, self._asset_id, {"rgbLight": 0})
+        await self.coordinator.api.control_asset(loc_id, self._asset_id, {"rgbLight": 7}) # 7 is Off
         await self.coordinator.async_request_refresh()
