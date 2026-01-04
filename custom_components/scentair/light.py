@@ -36,6 +36,7 @@ class ScentAirBacklight(CoordinatorEntity, LightEntity):
 
     _attr_has_entity_name = True
     _attr_name = "Backlight"
+    _attr_icon = "mdi:led-on"
     _attr_supported_color_modes = {ColorMode.ONOFF}
     _attr_color_mode = ColorMode.ONOFF
 
@@ -88,6 +89,7 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
 
     _attr_has_entity_name = True
     _attr_name = "Accent Light"
+    _attr_icon = "mdi:lightbulb"
     _attr_supported_color_modes = {ColorMode.ONOFF}
     _attr_color_mode = ColorMode.ONOFF
 

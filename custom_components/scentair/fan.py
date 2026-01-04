@@ -45,6 +45,7 @@ class ScentAirFan(CoordinatorEntity, FanEntity):
 
     _attr_has_entity_name = True
     _attr_name = None # Use device name
+    _attr_icon = "mdi:air-freshener"
     _attr_supported_features = FanEntityFeature.SET_SPEED | FanEntityFeature.TURN_ON | FanEntityFeature.TURN_OFF
 
     def __init__(self, coordinator: ScentAirDataUpdateCoordinator, asset_id: str) -> None:
@@ -101,7 +102,7 @@ class ScentAirFan(CoordinatorEntity, FanEntity):
         """Return the number of speeds the fan supports."""
         return int_states_in_range(SPEED_RANGE)
 
-    async def async_turn_on(self, percentage: int | None = None, **kwargs: Any) -> None:
+    async def async_turn_on(self, percentage: int | None = None, preset_mode: str | None = None, **kwargs: Any) -> None:
         """Turn on the fan."""
         if percentage is None:
             percentage = 50 # Default to middle speed if not specified
