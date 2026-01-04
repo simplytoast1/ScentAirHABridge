@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+
+# Sensitive/Local files
+examples/
+*.har
+token.txt
+api_key.txt
+
+# Mac
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
