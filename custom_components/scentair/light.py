@@ -97,6 +97,8 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
 
     # Mapping based on analysis:
     # 0=Black(Off), 1=Red, 2=Orange, 3=Yellow, 4=Green, 5=Blue, 6=Purple, 7=White, 8=Aqua
+    # Mapping based on analysis:
+    # 0=Black(Off), 1=Red, 2=Orange, 3=Yellow, 4=Green, 5=Blue, 6=Purple, 7=White(Off/Idle?), 8=Aqua
     _COLORS = {
         0: "Off",
         1: "Red",
@@ -105,11 +107,11 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
         4: "Green",
         5: "Blue",
         6: "Purple",
-        7: "White",
+        7: "White (Idle)", # User reports 7 is considered off
         8: "Aqua"
     }
-    # Reverse map for name -> id
-    _COLOR_TO_ID = {v: k for k, v in _COLORS.items() if k != 0}
+    # Reverse map for name -> id (Exclude 0 and 7 from selectable effects if 7 is off)
+    _COLOR_TO_ID = {v: k for k, v in _COLORS.items() if k not in (0, 7)}
     
     # Map for easy HS color matching (Hue, Saturation)
     _HS_MAP = {
@@ -119,7 +121,7 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
         4: (120, 100),  # Green
         5: (240, 100),  # Blue
         6: (270, 100),  # Purple
-        7: (0, 0),      # White
+        7: (0, 0),      # White (Idle)
         8: (180, 100),  # Aqua
     }
 
@@ -151,9 +153,10 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
             
     @property
     def is_on(self) -> bool:
-        """Return true if light is on (value > 0)."""
+        """Return true if light is on (value > 0 and not 7)."""
         val = self._get_current_value()
-        return val > 0
+        # User reports 7 is 'off'
+        return val > 0 and val != 7
 
     @property
     def brightness_step_pct(self) -> float | None:
@@ -182,7 +185,7 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the light."""
         loc_id = self._asset_data.get("_loc_id")
-        target_val = 7 # Default White
+        target_val = 2 # Default to Orange if just toggled on, as 7 is Off
 
         # Handle Effect selection
         if (effect := kwargs.get("effect")) and effect in self._COLOR_TO_ID:
@@ -193,7 +196,7 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
             hue, sat = hs
             # Simple nearest neighbor logic
             if sat < 20:
-                target_val = 7 # White
+                target_val = 2 # Fallback for white -> Orange
             else:
                 # Map hue to colors
                 # Red=0/360, Orange=30, Yellow=60, Green=120, Aqua=180, Blue=240, Purple=270
