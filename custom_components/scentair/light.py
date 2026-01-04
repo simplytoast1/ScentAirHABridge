@@ -13,7 +13,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, SCENTAIR_COLORS
 from .coordinator import ScentAirDataUpdateCoordinator
 
 async def async_setup_entry(
@@ -34,7 +34,7 @@ async def async_setup_entry(
 
 class ScentAirBacklight(CoordinatorEntity, LightEntity):
     """Representation of the ScentAir Backlight."""
-
+    # ... (rest of class is unchanged) ...
     _attr_has_entity_name = True
     _attr_name = "Backlight"
     _attr_icon = "mdi:led-on"
@@ -95,21 +95,9 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
     _attr_color_mode = ColorMode.HS
     _attr_supported_features = LightEntityFeature.EFFECT
 
-    # Mapping based on analysis:
-    # 0=Black(Off), 1=Red, 2=Orange, 3=Yellow, 4=Green, 5=Blue, 6=Purple, 7=White, 8=Aqua
-    # Mapping based on analysis:
-    # 0=Aqua, 1=Red, 2=Orange, 3=Yellow, 4=Green, 5=Blue, 6=Purple, 7=Black(Off), 8=White
-    _COLORS = {
-        0: "Aqua",
-        1: "Red",
-        2: "Orange",
-        3: "Yellow",
-        4: "Green",
-        5: "Blue",
-        6: "Purple",
-        7: "Black (Off)",
-        8: "White"
-    }
+    # Use shared constants
+    _COLORS = SCENTAIR_COLORS
+    
     # Reverse map for name -> id (Exclude 7)
     _COLOR_TO_ID = {v: k for k, v in _COLORS.items() if k != 7}
     

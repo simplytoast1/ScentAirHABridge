@@ -1,18 +1,13 @@
-"""Number platform for ScentAir."""
+"""Select platform for ScentAir."""
 from __future__ import annotations
 
-from typing import Any
-
-from homeassistant.components.number import (
-    NumberEntity,
-    NumberMode,
-)
+from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, SCENTAIR_COLORS
 from .coordinator import ScentAirDataUpdateCoordinator
 
 async def async_setup_entry(
@@ -20,37 +15,38 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up ScentAir number from a config entry."""
+    """Set up ScentAir select from a config entry."""
     coordinator: ScentAirDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     entities = []
     for asset_id, data in coordinator.data.items():
         if "fields" in data and "config" in data["fields"]:
-            entities.append(ScentAirRGBNumber(coordinator, asset_id))
+            entities.append(ScentAirColorSelect(coordinator, asset_id))
 
     async_add_entities(entities)
 
-class ScentAirRGBNumber(CoordinatorEntity, NumberEntity):
-    """Representation of the ScentAir RGB Light Value."""
+class ScentAirColorSelect(CoordinatorEntity, SelectEntity):
+    """Representation of the ScentAir RGB Light Color Select."""
 
     _attr_has_entity_name = True
-    _attr_name = "Accent Light Value"
-    _attr_icon = "mdi:palette"
-    _attr_mode = NumberMode.SLIDER
-    _attr_native_min_value = 0
-    _attr_native_max_value = 100 # Adjust if we find it goes higher
-    _attr_native_step = 1
+    _attr_name = "Accent Color"
+    _attr_icon = "mdi:palette-swatch"
 
     def __init__(self, coordinator: ScentAirDataUpdateCoordinator, asset_id: str) -> None:
         """Initialize."""
         super().__init__(coordinator)
         self._asset_id = asset_id
-        self._attr_unique_id = f"{asset_id}_rgb_val"
+        self._attr_unique_id = f"{asset_id}_rgb_select"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, asset_id)},
             "name": f"ScentAir {asset_id}",
             "manufacturer": "ScentAir",
         }
+        # List of available color names
+        self._attr_options = list(SCENTAIR_COLORS.values())
+        
+        # Reverse map for easy lookup
+        self._name_to_id = {v: k for k, v in SCENTAIR_COLORS.items()}
 
     @property
     def _asset_data(self) -> dict:
@@ -66,16 +62,20 @@ class ScentAirRGBNumber(CoordinatorEntity, NumberEntity):
             return {}
 
     @property
-    def native_value(self) -> float | None:
-        """Return the entity value."""
+    def current_option(self) -> str | None:
+        """Return the selected entity option to represent the entity state."""
         try:
-            return float(self._config.get("rgbLight", {}).get("integerValue", "0"))
+            val = int(self._config.get("rgbLight", {}).get("integerValue", "7"))
+            return SCENTAIR_COLORS.get(val, "Off")
         except (ValueError, TypeError):
-            return 0.0
+            return "Off"
 
-    async def async_set_native_value(self, value: float) -> None:
-        """Update the current value."""
-        val = int(value)
+    async def async_select_option(self, option: str) -> None:
+        """Change the selected option."""
+        val = self._name_to_id.get(option)
+        if val is None:
+            return # Should not happen
+
         loc_id = self._asset_data.get("_loc_id")
         await self.coordinator.api.control_asset(loc_id, self._asset_id, {"rgbLight": val})
         await self.coordinator.async_request_refresh()
