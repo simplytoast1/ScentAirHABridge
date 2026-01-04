@@ -6,6 +6,7 @@ from typing import Any
 from homeassistant.components.light import (
     ColorMode,
     LightEntity,
+    LightEntityFeature,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -89,9 +90,38 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
 
     _attr_has_entity_name = True
     _attr_name = "Accent Light"
-    _attr_icon = "mdi:lightbulb"
-    _attr_supported_color_modes = {ColorMode.ONOFF}
-    _attr_color_mode = ColorMode.ONOFF
+    _attr_icon = "mdi:lightbulb-variant"
+    _attr_supported_color_modes = {ColorMode.HS}
+    _attr_color_mode = ColorMode.HS
+    _attr_supported_features = LightEntityFeature.EFFECT
+
+    # Mapping based on analysis:
+    # 0=Black(Off), 1=Red, 2=Orange, 3=Yellow, 4=Green, 5=Blue, 6=Purple, 7=White, 8=Aqua
+    _COLORS = {
+        0: "Off",
+        1: "Red",
+        2: "Orange",
+        3: "Yellow",
+        4: "Green",
+        5: "Blue",
+        6: "Purple",
+        7: "White",
+        8: "Aqua"
+    }
+    # Reverse map for name -> id
+    _COLOR_TO_ID = {v: k for k, v in _COLORS.items() if k != 0}
+    
+    # Map for easy HS color matching (Hue, Saturation)
+    _HS_MAP = {
+        1: (0, 100),    # Red
+        2: (30, 100),   # Orange
+        3: (60, 100),   # Yellow
+        4: (120, 100),  # Green
+        5: (240, 100),  # Blue
+        6: (270, 100),  # Purple
+        7: (0, 0),      # White
+        8: (180, 100),  # Aqua
+    }
 
     def __init__(self, coordinator: ScentAirDataUpdateCoordinator, asset_id: str) -> None:
         """Initialize the light."""
@@ -104,6 +134,7 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
             "name": f"ScentAir {asset_id}",
             "manufacturer": "ScentAir",
         }
+        self._attr_effect_list = list(self._COLOR_TO_ID.keys())
 
     @property
     def _asset_data(self) -> dict:
@@ -117,22 +148,64 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
             return self._asset_data["fields"]["config"]["mapValue"]["fields"]
         except (KeyError, TypeError):
             return {}
-
+            
     @property
     def is_on(self) -> bool:
-        """Return true if light is on."""
-        # RGB Light is 0 (off) or >0 (on/color code). Logic based on 'rgbLight' integer.
+        """Return true if light is on (value > 0)."""
+        val = self._get_current_value()
+        return val > 0
+
+    @property
+    def brightness_step_pct(self) -> float | None:
+        """Return brightness."""
+        # Simple On/Off brightness for now, or could map to 7/8? No, strictly preset.
+        return 100 if self.is_on else 0
+
+    @property
+    def hs_color(self) -> tuple[float, float] | None:
+        """Return the hs color value."""
+        val = self._get_current_value()
+        return self._HS_MAP.get(val, (0, 0)) # Default to white if unknown
+
+    @property
+    def effect(self) -> str | None:
+        """Return the current start effect."""
+        val = self._get_current_value()
+        return self._COLORS.get(val, "White") if val > 0 else None
+
+    def _get_current_value(self) -> int:
         try:
-            val = int(self._config.get("rgbLight", {}).get("integerValue", "0"))
-            return val > 0
+            return int(self._config.get("rgbLight", {}).get("integerValue", "0"))
         except (ValueError, TypeError):
-            return False
+            return 0
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the light."""
-        # Default to 7 (White/On) if turning on from off state, or preserve if we knew how
         loc_id = self._asset_data.get("_loc_id")
-        await self.coordinator.api.control_asset(loc_id, self._asset_id, {"rgbLight": 7})
+        target_val = 7 # Default White
+
+        # Handle Effect selection
+        if (effect := kwargs.get("effect")) and effect in self._COLOR_TO_ID:
+            target_val = self._COLOR_TO_ID[effect]
+            
+        # Handle HS Color selection (Find closest match)
+        elif (hs := kwargs.get("hs_color")):
+            hue, sat = hs
+            # Simple nearest neighbor logic
+            if sat < 20:
+                target_val = 7 # White
+            else:
+                # Map hue to colors
+                # Red=0/360, Orange=30, Yellow=60, Green=120, Aqua=180, Blue=240, Purple=270
+                if 15 <= hue < 45: target_val = 2 # Orange
+                elif 45 <= hue < 90: target_val = 3 # Yellow
+                elif 90 <= hue < 150: target_val = 4 # Green
+                elif 150 <= hue < 210: target_val = 8 # Aqua
+                elif 210 <= hue < 260: target_val = 5 # Blue
+                elif 260 <= hue < 315: target_val = 6 # Purple
+                else: target_val = 1 # Red
+
+        await self.coordinator.api.control_asset(loc_id, self._asset_id, {"rgbLight": target_val})
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:

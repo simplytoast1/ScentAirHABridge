@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from .const import DOMAIN
 from .coordinator import ScentAirDataUpdateCoordinator
 
-PLATFORMS: list[Platform] = [Platform.FAN, Platform.LIGHT]
+PLATFORMS: list[Platform] = [Platform.FAN, Platform.LIGHT, Platform.NUMBER]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up ScentAir from a config entry."""
