@@ -98,7 +98,7 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
     # Mapping based on analysis:
     # 0=Black(Off), 1=Red, 2=Orange, 3=Yellow, 4=Green, 5=Blue, 6=Purple, 7=White, 8=Aqua
     # Mapping based on analysis:
-    # 0=Black(Off), 1=Red, 2=Orange, 3=Yellow, 4=Green, 5=Blue, 6=Purple, 7=White(Off/Idle?), 8=Aqua
+    # 0=Black(Off), 1=Red, 2=Orange, 3=Yellow, 4=Green, 5=Blue, 6=Purple, 7=Black(Off), 8=White
     _COLORS = {
         0: "Off",
         1: "Red",
@@ -107,10 +107,10 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
         4: "Green",
         5: "Blue",
         6: "Purple",
-        7: "White (Idle)", # User reports 7 is considered off
-        8: "Aqua"
+        7: "Black (Off)",
+        8: "White"
     }
-    # Reverse map for name -> id (Exclude 0 and 7 from selectable effects if 7 is off)
+    # Reverse map for name -> id (Exclude 0 and 7)
     _COLOR_TO_ID = {v: k for k, v in _COLORS.items() if k not in (0, 7)}
     
     # Map for easy HS color matching (Hue, Saturation)
@@ -121,8 +121,8 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
         4: (120, 100),  # Green
         5: (240, 100),  # Blue
         6: (270, 100),  # Purple
-        7: (0, 0),      # White (Idle)
-        8: (180, 100),  # Aqua
+        7: (0, 0),      # Black/Off
+        8: (0, 0),      # White
     }
 
     def __init__(self, coordinator: ScentAirDataUpdateCoordinator, asset_id: str) -> None:
@@ -155,7 +155,7 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
     def is_on(self) -> bool:
         """Return true if light is on (value > 0 and not 7)."""
         val = self._get_current_value()
-        # User reports 7 is 'off'
+        # 7 is Black/Off based on user logs
         return val > 0 and val != 7
 
     @property
@@ -174,7 +174,7 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
     def effect(self) -> str | None:
         """Return the current start effect."""
         val = self._get_current_value()
-        return self._COLORS.get(val, "White") if val > 0 else None
+        return self._COLORS.get(val, "White") if (val > 0 and val != 7) else None
 
     def _get_current_value(self) -> int:
         try:
@@ -185,7 +185,7 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the light."""
         loc_id = self._asset_data.get("_loc_id")
-        target_val = 2 # Default to Orange if just toggled on, as 7 is Off
+        target_val = 8 # Default to White (8)
 
         # Handle Effect selection
         if (effect := kwargs.get("effect")) and effect in self._COLOR_TO_ID:
@@ -196,15 +196,16 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
             hue, sat = hs
             # Simple nearest neighbor logic
             if sat < 20:
-                target_val = 2 # Fallback for white -> Orange
+                target_val = 8 # White
             else:
                 # Map hue to colors
-                # Red=0/360, Orange=30, Yellow=60, Green=120, Aqua=180, Blue=240, Purple=270
+                # Red=0/360, Orange=30, Yellow=60, Green=120, Blue=240, Purple=270
                 if 15 <= hue < 45: target_val = 2 # Orange
                 elif 45 <= hue < 90: target_val = 3 # Yellow
                 elif 90 <= hue < 150: target_val = 4 # Green
-                elif 150 <= hue < 210: target_val = 8 # Aqua
-                elif 210 <= hue < 260: target_val = 5 # Blue
+                # Aqua was 8, but 8 is white. So skipping Aqua or mapping to Green/Blue?
+                # Maybe 150-210 was Aqua(8). Now 150-210 -> Blue(5)?
+                elif 150 <= hue < 260: target_val = 5 # Blue (Wide range to cover aqua)
                 elif 260 <= hue < 315: target_val = 6 # Purple
                 else: target_val = 1 # Red
 
