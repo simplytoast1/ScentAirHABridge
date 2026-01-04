@@ -45,7 +45,7 @@ class ScentAirFan(CoordinatorEntity, FanEntity):
 
     _attr_has_entity_name = True
     _attr_name = None # Use device name
-    _attr_icon = "mdi:air-freshener"
+    _attr_icon = "mdi:fan"
     _attr_supported_features = FanEntityFeature.SET_SPEED | FanEntityFeature.TURN_ON | FanEntityFeature.TURN_OFF
 
     def __init__(self, coordinator: ScentAirDataUpdateCoordinator, asset_id: str) -> None:
