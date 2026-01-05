@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import math
+import logging
 from typing import Any
+
+_LOGGER = logging.getLogger(__name__)
 
 from homeassistant.components.fan import (
     FanEntity,
@@ -60,6 +63,7 @@ class ScentAirFan(CoordinatorEntity, FanEntity):
             "name": f"ScentAir {asset_id}",
             "manufacturer": "ScentAir",
         }
+        _LOGGER.debug("Setting up ScentAir Fan for asset: %s", asset_id)
 
     @property
     def _asset_data(self) -> dict:
@@ -121,7 +125,11 @@ class ScentAirFan(CoordinatorEntity, FanEntity):
              await self.async_turn_off()
              return
 
-        speed = math.ceil(percentage_to_ranged_value(SPEED_RANGE, percentage))
+        # Use standard rounding for "nearest neighbor" behavior instead of ceil
+        # 0-10% -> 0 (Off)
+        # 1-100% -> mapped to 1-10
+        # Example: 12% is closer to 1 (10%) than 2 (20%), so round gives 1.
+        speed = math.floor(percentage_to_ranged_value(SPEED_RANGE, percentage) + 0.5)
         
         loc_id = self._asset_data.get("_loc_id")
         await self.coordinator.api.control_asset(loc_id, self._asset_id, {"fanSpeed": speed})
