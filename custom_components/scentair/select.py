@@ -30,7 +30,7 @@ class ScentAirColorSelect(CoordinatorEntity, SelectEntity):
 
     _attr_has_entity_name = True
     _attr_name = "Accent Color"
-    _attr_icon = "mdi:palette-swatch"
+    _attr_icon = "mdi:palette"
 
     def __init__(self, coordinator: ScentAirDataUpdateCoordinator, asset_id: str) -> None:
         """Initialize."""

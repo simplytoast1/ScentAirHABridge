@@ -36,7 +36,7 @@ class ScentAirBacklight(CoordinatorEntity, LightEntity):
     """Representation of the ScentAir Backlight."""
     # ... (rest of class is unchanged) ...
     _attr_has_entity_name = True
-    _attr_name = "Backlight"
+    _attr_name = "Logo Light"
     _attr_icon = "mdi:led-on"
     _attr_supported_color_modes = {ColorMode.ONOFF}
     _attr_color_mode = ColorMode.ONOFF
