@@ -1,7 +1,7 @@
 {
   "domain": "scentair",
   "name": "ScentAir",
-  "codeowners": [],
+  "codeowners": ["@simplytoast1"],
   "config_flow": true,
   "documentation": "https://github.com/simplytoast1/ScentAirHABridge",
   "iot_class": "cloud_polling",
