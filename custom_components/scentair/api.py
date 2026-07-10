@@ -131,10 +131,18 @@ class ScentAirAPI:
     def _auth_headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._id_token}"}
 
-    async def _request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
-        """Make an API request, re-establishing auth on a 401."""
+    async def _ensure_login(self) -> None:
+        """Log in if there is no token yet.
+
+        Must run BEFORE building any Firestore URL: login() is what
+        populates self._org_id, which those URLs interpolate.
+        """
         if not self._id_token:
             await self.login()
+
+    async def _request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
+        """Make an API request, re-establishing auth on a 401."""
+        await self._ensure_login()
 
         try:
             async with self._session.request(
@@ -178,12 +186,14 @@ class ScentAirAPI:
 
     async def get_locations(self) -> list[dict[str, Any]]:
         """Get list of locations for the organization."""
+        await self._ensure_login()
         return await self._list_documents(
             f"{FIRESTORE_BASE}/organizations/{self._org_id}/locations"
         )
 
     async def get_assets(self, location_id: str) -> list[dict[str, Any]]:
         """Get assets for a specific location."""
+        await self._ensure_login()
         return await self._list_documents(
             f"{FIRESTORE_BASE}/organizations/{self._org_id}/locations/{location_id}/assets"
         )
@@ -199,6 +209,7 @@ class ScentAirAPI:
         if not location_id or not asset_id:
             raise ValueError("location_id and asset_id are required")
 
+        await self._ensure_login()
         url = f"{FIRESTORE_BASE}/organizations/{self._org_id}/locations/{location_id}/assets/{asset_id}"
 
         fields: dict[str, dict[str, Any]] = {}
