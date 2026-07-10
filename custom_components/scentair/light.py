@@ -4,67 +4,59 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.light import (
+    ATTR_EFFECT,
+    ATTR_HS_COLOR,
     ColorMode,
     LightEntity,
     LightEntityFeature,
 )
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, SCENTAIR_COLORS
+from . import ScentAirConfigEntry
+from .const import SCENTAIR_COLORS
 from .coordinator import ScentAirDataUpdateCoordinator
+from .entity import ScentAirEntity, async_setup_scentair_platform
+
+# rgbLight value meanings (from user logs): 7 is Black/Off, 8 is White.
+RGB_OFF = 7
+RGB_WHITE = 8
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: ScentAirConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up ScentAir light from a config entry."""
-    coordinator: ScentAirDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    entities = []
-    for asset_id, data in coordinator.data.items():
-        if "fields" in data and "config" in data["fields"]:
-            entities.append(ScentAirBacklight(coordinator, asset_id))
-            entities.append(ScentAirRGB(coordinator, asset_id))
+    def _factory(
+        coordinator: ScentAirDataUpdateCoordinator, asset_id: str, data: dict
+    ) -> list[LightEntity]:
+        if "config" in data.get("fields", {}):
+            return [
+                ScentAirBacklight(coordinator, asset_id),
+                ScentAirRGB(coordinator, asset_id),
+            ]
+        return []
 
-    async_add_entities(entities)
+    async_setup_scentair_platform(entry, async_add_entities, _factory)
 
-class ScentAirBacklight(CoordinatorEntity, LightEntity):
+
+class ScentAirBacklight(ScentAirEntity, LightEntity):
     """Representation of the ScentAir Backlight."""
-    # ... (rest of class is unchanged) ...
-    _attr_has_entity_name = True
+
     _attr_name = "Logo Light"
     _attr_icon = "mdi:led-on"
     _attr_supported_color_modes = {ColorMode.ONOFF}
     _attr_color_mode = ColorMode.ONOFF
 
-    def __init__(self, coordinator: ScentAirDataUpdateCoordinator, asset_id: str) -> None:
+    def __init__(
+        self, coordinator: ScentAirDataUpdateCoordinator, asset_id: str
+    ) -> None:
         """Initialize the light."""
-        super().__init__(coordinator)
-        self._asset_id = asset_id
-        
+        super().__init__(coordinator, asset_id)
         self._attr_unique_id = f"{asset_id}_backlight"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, asset_id)},
-            "name": f"ScentAir {asset_id}",
-            "manufacturer": "ScentAir",
-        }
-
-    @property
-    def _asset_data(self) -> dict:
-        """Get current asset data."""
-        return self.coordinator.data.get(self._asset_id, {})
-
-    @property
-    def _config(self) -> dict:
-        """Get config map."""
-        try:
-            return self._asset_data["fields"]["config"]["mapValue"]["fields"]
-        except (KeyError, TypeError):
-            return {}
 
     @property
     def is_on(self) -> bool:
@@ -73,22 +65,16 @@ class ScentAirBacklight(CoordinatorEntity, LightEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the light."""
-        loc_id = self._asset_data.get("_loc_id")
-        await self.coordinator.api.control_asset(loc_id, self._asset_id, {"isBacklightOn": True})
-        # Optimistic update
-        await self.coordinator.async_request_refresh()
+        await self._async_control({"isBacklightOn": True})
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the light."""
-        loc_id = self._asset_data.get("_loc_id")
-        await self.coordinator.api.control_asset(loc_id, self._asset_id, {"isBacklightOn": False})
-        await self.coordinator.async_request_refresh()
+        await self._async_control({"isBacklightOn": False})
 
 
-class ScentAirRGB(CoordinatorEntity, LightEntity):
+class ScentAirRGB(ScentAirEntity, LightEntity):
     """Representation of the ScentAir RGB Light (Accent Light)."""
 
-    _attr_has_entity_name = True
     _attr_name = "Accent Light"
     _attr_icon = "mdi:lightbulb-variant"
     _attr_supported_color_modes = {ColorMode.HS}
@@ -97,10 +83,10 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
 
     # Use shared constants
     _COLORS = SCENTAIR_COLORS
-    
-    # Reverse map for name -> id (Exclude 7)
-    _COLOR_TO_ID = {v: k for k, v in _COLORS.items() if k != 7}
-    
+
+    # Reverse map for name -> id (Exclude Off)
+    _COLOR_TO_ID = {v: k for k, v in _COLORS.items() if k != RGB_OFF}
+
     # Map for easy HS color matching (Hue, Saturation)
     _HS_MAP = {
         0: (180, 100),  # Aqua
@@ -114,93 +100,87 @@ class ScentAirRGB(CoordinatorEntity, LightEntity):
         8: (0, 0),      # White
     }
 
-    def __init__(self, coordinator: ScentAirDataUpdateCoordinator, asset_id: str) -> None:
+    def __init__(
+        self, coordinator: ScentAirDataUpdateCoordinator, asset_id: str
+    ) -> None:
         """Initialize the light."""
-        super().__init__(coordinator)
-        self._asset_id = asset_id
-        
+        super().__init__(coordinator, asset_id)
         self._attr_unique_id = f"{asset_id}_rgb"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, asset_id)},
-            "name": f"ScentAir {asset_id}",
-            "manufacturer": "ScentAir",
-        }
         self._attr_effect_list = list(self._COLOR_TO_ID.keys())
+        current = self._get_current_value()
+        self._last_color = current if current != RGB_OFF else None
 
-    @property
-    def _asset_data(self) -> dict:
-        """Get current asset data."""
-        return self.coordinator.data.get(self._asset_id, {})
-
-    @property
-    def _config(self) -> dict:
-        """Get config map."""
+    def _get_current_value(self) -> int:
         try:
-            return self._asset_data["fields"]["config"]["mapValue"]["fields"]
-        except (KeyError, TypeError):
-            return {}
-            
+            return int(
+                self._config.get("rgbLight", {}).get("integerValue", str(RGB_OFF))
+            )
+        except (ValueError, TypeError):
+            return RGB_OFF  # Default to Off
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Track the last color so turn_on can restore it."""
+        if (val := self._get_current_value()) != RGB_OFF:
+            self._last_color = val
+        super()._handle_coordinator_update()
+
     @property
     def is_on(self) -> bool:
         """Return true if light is on (value != 7)."""
-        val = self._get_current_value()
-        # 7 is Black/Off based on user logs
-        return val != 7
-
-    @property
-    def brightness_step_pct(self) -> float | None:
-        """Return brightness."""
-        return 100 if self.is_on else 0
+        return self._get_current_value() != RGB_OFF
 
     @property
     def hs_color(self) -> tuple[float, float] | None:
         """Return the hs color value."""
         val = self._get_current_value()
-        return self._HS_MAP.get(val, (0, 0)) # Default to white/off if unknown
+        if val == RGB_OFF:
+            return None
+        return self._HS_MAP.get(val, (0, 0))
 
     @property
     def effect(self) -> str | None:
-        """Return the current start effect."""
+        """Return the current color effect."""
         val = self._get_current_value()
-        return self._COLORS.get(val, "White") if val != 7 else None
+        if val == RGB_OFF:
+            return None
+        return self._COLORS.get(val, "White")
 
-    def _get_current_value(self) -> int:
-        try:
-            return int(self._config.get("rgbLight", {}).get("integerValue", "7"))
-        except (ValueError, TypeError):
-            return 7 # Default to Off
+    @staticmethod
+    def _closest_color(hue: float, sat: float) -> int:
+        """Map an HS color to the nearest supported color id."""
+        if sat < 20:
+            return RGB_WHITE
+        # Red=0/360, Orange=30, Yellow=60, Green=120, Aqua=180, Blue=240, Purple=270
+        if 15 <= hue < 45:
+            return 2  # Orange
+        if 45 <= hue < 90:
+            return 3  # Yellow
+        if 90 <= hue < 150:
+            return 4  # Green
+        if 150 <= hue < 210:
+            return 0  # Aqua
+        if 210 <= hue < 260:
+            return 5  # Blue
+        if 260 <= hue < 315:
+            return 6  # Purple
+        return 1  # Red
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the light."""
-        loc_id = self._asset_data.get("_loc_id")
-        target_val = 8 # Default to White (8)
-
-        # Handle Effect selection
-        if (effect := kwargs.get("effect")) and effect in self._COLOR_TO_ID:
+        if (effect := kwargs.get(ATTR_EFFECT)) and effect in self._COLOR_TO_ID:
             target_val = self._COLOR_TO_ID[effect]
-            
-        # Handle HS Color selection (Find closest match)
-        elif (hs := kwargs.get("hs_color")):
-            hue, sat = hs
-            # Simple nearest neighbor logic
-            if sat < 20:
-                target_val = 8 # White
-            else:
-                # Map hue to colors
-                # Red=0/360, Orange=30, Yellow=60, Green=120, Aqua=180, Blue=240, Purple=270
-                if 15 <= hue < 45: target_val = 2 # Orange
-                elif 45 <= hue < 90: target_val = 3 # Yellow
-                elif 90 <= hue < 150: target_val = 4 # Green
-                elif 150 <= hue < 210: target_val = 0 # Aqua (0)
-                elif 210 <= hue < 260: target_val = 5 # Blue
-                elif 260 <= hue < 315: target_val = 6 # Purple
-                else: target_val = 1 # Red
+        elif (hs := kwargs.get(ATTR_HS_COLOR)) is not None:
+            target_val = self._closest_color(*hs)
+        elif self.is_on:
+            # Plain turn_on while already on: keep the current color.
+            return
+        else:
+            # Restore the last known color, defaulting to White.
+            target_val = self._last_color if self._last_color is not None else RGB_WHITE
 
-        await self.coordinator.api.control_asset(loc_id, self._asset_id, {"rgbLight": target_val})
-        await self.coordinator.async_request_refresh()
+        await self._async_control({"rgbLight": target_val})
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the light."""
-        loc_id = self._asset_data.get("_loc_id")
-        await self.coordinator.api.control_asset(loc_id, self._asset_id, {"rgbLight": 7}) # 7 is Off
-        await self.coordinator.async_request_refresh()
+        await self._async_control({"rgbLight": RGB_OFF})

@@ -22,9 +22,17 @@ Before installing this component, ensure your device is connected to the ScentAi
 3.  **Verify**: Log in to [ScentConnect.com](https://scentconnect.com/) and verify you can control your device (Fan Speed / Lights).
 
 ## Features
-- **Fan Control**: Turn device On/Off and set Intensity (1-100%).
-- **Backlight Control**: Toggle the device LED backlight.
-- **Multi-Device**: Automatically discovers all devices on your ScentAir account.
+Each device gets the following entities:
+- **Fan**: Turn the diffuser On/Off and set intensity (1-100%).
+- **Fan Speed** (number): Set the raw fan speed (0-10) directly.
+- **Logo Light**: Toggle the device LED backlight.
+- **Accent Light**: RGB accent light with color selection.
+- **Accent Color** (select): Pick the accent color by name.
+- **Online** (binary sensor): Cloud connectivity status of the device.
+
+Other capabilities:
+- **Multi-Device**: Automatically discovers all devices on your ScentAir account, including devices added after setup.
+- **Reauthentication**: If your ScentConnect password changes, Home Assistant prompts you to reauthenticate instead of failing silently.
 
 ## Installation
 

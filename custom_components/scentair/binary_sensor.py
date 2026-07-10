@@ -5,53 +5,44 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from . import ScentAirConfigEntry
 from .coordinator import ScentAirDataUpdateCoordinator
+from .entity import ScentAirEntity, async_setup_scentair_platform
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: ScentAirConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up ScentAir binary sensor from a config entry."""
-    coordinator: ScentAirDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    entities = []
-    for asset_id, data in coordinator.data.items():
+    def _factory(
+        coordinator: ScentAirDataUpdateCoordinator, asset_id: str, data: dict
+    ) -> list[ScentAirOnlineSensor]:
         # Check if status field exists (it should for all assets)
         if "fields" in data:
-            entities.append(ScentAirOnlineSensor(coordinator, asset_id))
+            return [ScentAirOnlineSensor(coordinator, asset_id)]
+        return []
 
-    async_add_entities(entities)
+    async_setup_scentair_platform(entry, async_add_entities, _factory)
 
-class ScentAirOnlineSensor(CoordinatorEntity, BinarySensorEntity):
+
+class ScentAirOnlineSensor(ScentAirEntity, BinarySensorEntity):
     """Representation of the ScentAir Online Status."""
 
-    _attr_has_entity_name = True
     _attr_name = "Online"
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
 
-    def __init__(self, coordinator: ScentAirDataUpdateCoordinator, asset_id: str) -> None:
+    def __init__(
+        self, coordinator: ScentAirDataUpdateCoordinator, asset_id: str
+    ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._asset_id = asset_id
-        
+        super().__init__(coordinator, asset_id)
         self._attr_unique_id = f"{asset_id}_online"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, asset_id)},
-            "name": f"ScentAir {asset_id}",
-            "manufacturer": "ScentAir",
-        }
-
-    @property
-    def _asset_data(self) -> dict:
-        """Get current asset data."""
-        return self.coordinator.data.get(self._asset_id, {})
 
     @property
     def is_on(self) -> bool:
@@ -60,7 +51,7 @@ class ScentAirOnlineSensor(CoordinatorEntity, BinarySensorEntity):
         fields = self._asset_data.get("fields", {})
         if "isOnline" in fields:
             return fields["isOnline"].get("booleanValue", False)
-            
+
         # Fallback to 'status.isOnline' if previously observed structure exists
         status = fields.get("status", {}).get("mapValue", {}).get("fields", {})
         return status.get("isOnline", {}).get("booleanValue", False)
