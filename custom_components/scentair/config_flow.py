@@ -11,7 +11,13 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import ScentAirAPI, ScentAirAuthError, ScentAirConnectionError
+from .api import (
+    ScentAirAPI,
+    ScentAirAuthError,
+    ScentAirConnectionError,
+    ScentAirNoOrganizationError,
+    ScentAirRateLimitError,
+)
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -47,8 +53,12 @@ class ScentAirConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         try:
             await api.login()
+        except ScentAirNoOrganizationError:
+            errors["base"] = "no_organization"
         except ScentAirAuthError:
             errors["base"] = "invalid_auth"
+        except ScentAirRateLimitError:
+            errors["base"] = "too_many_attempts"
         except ScentAirConnectionError:
             errors["base"] = "cannot_connect"
         except Exception:  # pylint: disable=broad-except

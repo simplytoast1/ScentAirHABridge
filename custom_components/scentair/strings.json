@@ -19,6 +19,8 @@
     },
     "error": {
       "invalid_auth": "Invalid email or password.",
+      "no_organization": "Signed in, but this account has no ScentConnect organization. Claim your device on scentconnect.com, then try again.",
+      "too_many_attempts": "Too many sign-in attempts. Wait a few minutes, then try again.",
       "cannot_connect": "Failed to connect to the ScentAir service.",
       "unknown": "Unexpected error. Check the logs for details."
     },

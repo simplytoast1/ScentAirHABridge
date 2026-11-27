@@ -1,11 +1,15 @@
 name: HACS
 
+# No schedule trigger on purpose: GitHub disables any workflow that has one
+# after 60 days without repository activity, and a disabled workflow stops
+# running on push and pull_request too.
 on:
   push:
   pull_request:
-  schedule:
-    - cron: "0 0 * * *"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   hacs:
@@ -13,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: HACS Action
         uses: hacs/action@main
         with:
